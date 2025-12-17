@@ -23,9 +23,9 @@ The end state is a documented matrix of:
 - **Materializable** (can they create derived tables / CTAS?)
 - **Exportable / Copyable** (can they download/export/copy/snapshot/clone?)
 
-### Important constraint
+### Setup Requirements
 
-This environment (Cursor sandbox) **cannot log into your GCP account** or create projects on your behalf. The repo provides:
+This POC requires you to have access to GCP projects and the necessary permissions. The repo provides:
 
 - **Console click-paths**
 - **`gcloud`/`bq` commands**
