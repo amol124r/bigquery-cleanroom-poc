@@ -33,6 +33,7 @@ This environment (Cursor sandbox) **cannot log into your GCP account** or create
 
 ### Start here
 
+- **📋 [Comprehensive Summary & Recommendations](./docs/70-comprehensive-summary-and-recommendations.md)** ⭐ **START HERE**
 - `docs/00-architecture.md`
 - `docs/05-naming-and-cost.md`
 - `docs/10-consumer-capabilities-matrix.md`
