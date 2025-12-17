@@ -96,9 +96,9 @@ And all materialization/export operations remain blocked.
 - Note: Regular exchanges may not provide the same level of audit/logging as DCR exchanges
 
 ### For Selective Resource Sharing Without Egress
-- **Not currently supported** in Analytics Hub
-- DCR exchanges require egress controls
-- Regular exchanges don't support selective resource sharing
+- ✅ **Use Authorized Views in Regular Exchange**: Create authorized views in the cleanroom project that reference producer data, then share those views through a regular exchange with egress disabled
+- This allows selective resource sharing (via authorized views) without DCR restrictions
+- See [Authorized Views in Analytics Hub](./60-authorized-views-in-analytics-hub.md) for details
 
 ## Conclusion
 
@@ -107,7 +107,10 @@ And all materialization/export operations remain blocked.
 This is **by design** - clean rooms are meant to provide secure, privacy-preserving data sharing where consumers can analyze data but cannot exfiltrate it.
 
 If you need to allow consumers to export/copy data, consider:
-1. Using regular BigQuery dataset sharing (outside Analytics Hub)
-2. Using a regular Analytics Hub exchange (but with entire dataset sharing, not selective)
-3. Accepting that DCR exchanges enforce restrictions as a core feature
+1. **Using authorized views in a regular Analytics Hub exchange** (allows selective sharing + export) ⭐ **RECOMMENDED**
+2. Using regular BigQuery dataset sharing (outside Analytics Hub)
+3. Using a regular Analytics Hub exchange (but with entire dataset sharing, not selective)
+4. Accepting that DCR exchanges enforce restrictions as a core feature
+
+**See [Authorized Views in Analytics Hub](./60-authorized-views-in-analytics-hub.md) for implementation details.**
 
