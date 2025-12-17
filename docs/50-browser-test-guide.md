@@ -202,3 +202,9 @@ This guide walks you through testing **what a consumer can and cannot do** with 
 
 To prevent raw data visibility, you need **clean room analysis rules** (aggregation threshold, differential privacy, etc.) in addition to restricted egress.
 
+---
+
+## Related Documentation
+
+- **[Egress Controls Comparison](./55-egress-controls-comparison.md)**: Detailed comparison of what happens when egress controls are enabled vs disabled (or partially disabled). Includes findings that DCR exchanges always enforce restrictions, even when individual flags are set to `false`.
+
