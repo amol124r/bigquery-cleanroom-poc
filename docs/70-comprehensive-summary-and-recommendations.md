@@ -125,16 +125,18 @@ This Proof of Concept (POC) was designed to validate **what a consumer can and c
 
 **Configuration:**
 - Exchange Type: Regular (non-DCR)
-- Authorized View: Created in cleanroom project, references producer data
+- Authorized View: Created in sharing/hub project, references producer data
 - Listing: Points to authorized view dataset
 - Egress Controls: `enabled=false`, `restrictDirectTableAccess=false`, `restrictQueryResult=false`
 
 **Architecture:**
 ```
-Producer Project → (grants access) → Cleanroom Project → (shares via exchange) → Consumer Project
+Producer Project → (grants access) → Sharing/Hub Project → (shares via exchange) → Consumer Project
   └─ producer_shared                  └─ authorized_view                        └─ linked_dataset
      └─ user_events_view                 └─ references producer data                └─ can copy/export
 ```
+
+**Note:** For regular exchanges, we use a "sharing project" or "hub project" (not a "cleanroom project"). The term "cleanroom" is specific to Data Clean Room (DCR) exchanges.
 
 **Test Results:**
 - ✅ Authorized view created successfully
@@ -153,7 +155,7 @@ Producer Project → (grants access) → Cleanroom Project → (shares via excha
 - ❌ No DCR analysis rules (aggregation thresholds, differential privacy)
 - ❌ Standard audit/logging (not enhanced like DCR)
 - ❌ Requires additional setup (authorized views + access grants)
-- ❌ More complex architecture (3-project setup)
+- ❌ More complex architecture (3-project setup: producer, sharing/hub, consumer)
 
 **Verdict:** ✅ **RECOMMENDED** - Best balance of selective sharing + copy capability.
 
@@ -163,9 +165,11 @@ Producer Project → (grants access) → Cleanroom Project → (shares via excha
 
 **Configuration:**
 - Exchange Type: Data Clean Room (DCR)
-- Authorized View: Created in cleanroom project
+- Authorized View: Created in cleanroom project (DCR context)
 - Listing: Points to authorized view with `restrictQueryResult=false`
 - Egress Controls: `enabled=true` (required), `restrictDirectTableAccess=true` (required)
+
+**Note:** In DCR exchanges, the intermediary project is correctly called a "cleanroom project" since it hosts a Data Clean Room exchange.
 
 **Test Results:**
 - ❌ **All copy/export operations still blocked**
@@ -240,10 +244,10 @@ Producer Project → (grants access) → Cleanroom Project → (shares via excha
 
 **Implementation Steps:**
 1. Producer creates data in their project
-2. Producer grants cleanroom project access to source dataset
-3. Cleanroom project creates authorized views referencing producer data
-4. Cleanroom project creates regular (non-DCR) Analytics Hub exchange
-5. Cleanroom project creates listing pointing to authorized view dataset with `restrictedExportPolicy.enabled=false`
+2. Producer grants sharing/hub project access to source dataset
+3. Sharing/hub project creates authorized views referencing producer data
+4. Sharing/hub project creates regular (non-DCR) Analytics Hub exchange
+5. Sharing/hub project creates listing pointing to authorized view dataset with `restrictedExportPolicy.enabled=false`
 6. Consumer subscribes to exchange
 7. Consumer gets linked dataset and can query, transform, and copy data
 
@@ -310,15 +314,15 @@ SELECT * FROM producer_project.producer_raw.user_events;
 
 #### Step 2: Grant Access
 ```bash
-# Producer grants cleanroom project access
-bq update --add_access_entry="project:CLEANROOM_PROJECT_NUMBER:READER" \
+# Producer grants sharing/hub project access
+bq update --add_access_entry="project:SHARING_PROJECT_NUMBER:READER" \
   producer_project:producer_shared
 ```
 
 #### Step 3: Create Authorized View
 ```sql
--- In cleanroom project
-CREATE VIEW cleanroom_project.cleanroom_shared_views.authorized_user_events_view AS
+-- In sharing/hub project
+CREATE VIEW sharing_project.shared_views.authorized_user_events_view AS
 SELECT * FROM producer_project.producer_shared.user_events_view;
 ```
 
@@ -327,7 +331,7 @@ SELECT * FROM producer_project.producer_shared.user_events_view;
 # Create regular (non-DCR) exchange
 curl -X POST \
   -H "Authorization: Bearer ${TOKEN}" \
-  "https://analyticshub.googleapis.com/v1/projects/${CLEANROOM_PROJECT}/locations/us/dataExchanges" \
+  "https://analyticshub.googleapis.com/v1/projects/${SHARING_PROJECT}/locations/us/dataExchanges" \
   -d '{
     "displayName": "Data Sharing Exchange",
     "discoveryType": "DISCOVERY_TYPE_PRIVATE"
@@ -343,7 +347,7 @@ curl -X POST \
   -d '{
     "displayName": "Authorized View Listing",
     "bigqueryDataset": {
-      "dataset": "projects/CLEANROOM_NUM/datasets/cleanroom_shared_views",
+      "dataset": "projects/SHARING_PROJECT_NUM/datasets/shared_views",
       "restrictedExportPolicy": {
         "enabled": false,
         "restrictDirectTableAccess": false,
