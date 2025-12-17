@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Runs consumer-side tests to validate what is blocked/allowed on the linked dataset.
+# This focuses on egress controls (copy/export/snapshot/CTAS).
+
+source "$(dirname "$0")/00_env.local.sh"
+
+CONSUMER_LINKED_DATASET="linked_cr_poc_251217_22d0"
+SHARED_TABLE="user_events_view" # view behaves like table resource
+
+OUT_DIR="$(cd "$(dirname "$0")/.." && pwd)/out"
+mkdir -p "$OUT_DIR"
+
+log() { printf "\n== %s ==\n" "$1"; }
+run() { ( set +e; echo "+ $*"; "$@"; echo "exit=$?"; ) 2>&1 | tee -a "$OUT_DIR/consumer_tests.log"; }
+
+rm -f "$OUT_DIR/consumer_tests.log"
+
+log "1) Show dataset metadata (expect linked dataset)"
+run bq --project_id="$CONSUMER_PROJECT_ID" show --format=prettyjson "${CONSUMER_PROJECT_ID}:${CONSUMER_LINKED_DATASET}"
+
+log "2) List tables/views in linked dataset"
+run bq --project_id="$CONSUMER_PROJECT_ID" ls "${CONSUMER_PROJECT_ID}:${CONSUMER_LINKED_DATASET}"
+
+log "3) Attempt tabledata.list-style read (bq head) (often blocked when restrictDirectTableAccess=true)"
+run bq --project_id="$CONSUMER_PROJECT_ID" head -n 5 "${CONSUMER_PROJECT_ID}:${CONSUMER_LINKED_DATASET}.${SHARED_TABLE}"
+
+log "4) Run a simple aggregate query (should be allowed)"
+run bq --location="$BQ_LOCATION" --project_id="$CONSUMER_PROJECT_ID" query --use_legacy_sql=false \
+  "SELECT event_name, COUNT(*) AS c
+   FROM \`${CONSUMER_PROJECT_ID}.${CONSUMER_LINKED_DATASET}.${SHARED_TABLE}\`
+   GROUP BY event_name
+   ORDER BY c DESC"
+
+log "5) Join with consumer first-party table and aggregate (should be allowed if queries allowed)"
+run bq --location="$BQ_LOCATION" --project_id="$CONSUMER_PROJECT_ID" query --use_legacy_sql=false \
+  "SELECT a.segment, e.event_name, COUNT(*) AS events
+   FROM \`${CONSUMER_PROJECT_ID}.consumer_first_party.user_attributes\` a
+   JOIN \`${CONSUMER_PROJECT_ID}.${CONSUMER_LINKED_DATASET}.${SHARED_TABLE}\` e
+     ON e.user_id = a.user_id
+   GROUP BY a.segment, e.event_name
+   ORDER BY events DESC"
+
+log "6) Attempt CTAS into consumer_derived (expected blocked when restrictQueryResult=true)"
+run bq --location="$BQ_LOCATION" --project_id="$CONSUMER_PROJECT_ID" query --use_legacy_sql=false \
+  "CREATE OR REPLACE TABLE \`${CONSUMER_PROJECT_ID}.consumer_derived.derived_events_by_segment\` AS
+   SELECT a.segment, e.event_name, COUNT(*) AS events
+   FROM \`${CONSUMER_PROJECT_ID}.consumer_first_party.user_attributes\` a
+   JOIN \`${CONSUMER_PROJECT_ID}.${CONSUMER_LINKED_DATASET}.${SHARED_TABLE}\` e
+     ON e.user_id = a.user_id
+   GROUP BY a.segment, e.event_name"
+
+log "7) Attempt CREATE VIEW AS SELECT into consumer_derived (expected blocked when restrictQueryResult=true)"
+run bq --location="$BQ_LOCATION" --project_id="$CONSUMER_PROJECT_ID" query --use_legacy_sql=false \
+  "CREATE OR REPLACE VIEW \`${CONSUMER_PROJECT_ID}.consumer_derived.v_events_by_segment\` AS
+   SELECT a.segment, e.event_name, COUNT(*) AS events
+   FROM \`${CONSUMER_PROJECT_ID}.consumer_first_party.user_attributes\` a
+   JOIN \`${CONSUMER_PROJECT_ID}.${CONSUMER_LINKED_DATASET}.${SHARED_TABLE}\` e
+     ON e.user_id = a.user_id
+   GROUP BY a.segment, e.event_name"
+
+log "8) Attempt bq cp (expected blocked)"
+run bq --project_id="$CONSUMER_PROJECT_ID" cp \
+  "${CONSUMER_PROJECT_ID}:${CONSUMER_LINKED_DATASET}.${SHARED_TABLE}" \
+  "${CONSUMER_PROJECT_ID}:${CONSUMER_DATASET_DERIVED}.copied_user_events_view"
+
+log "9) Attempt snapshot/clone via SQL (expected blocked)"
+run bq --location="$BQ_LOCATION" --project_id="$CONSUMER_PROJECT_ID" query --use_legacy_sql=false \
+  "CREATE SNAPSHOT TABLE \`${CONSUMER_PROJECT_ID}.consumer_derived.snap_user_events\`
+   CLONE \`${CONSUMER_PROJECT_ID}.${CONSUMER_LINKED_DATASET}.${SHARED_TABLE}\`"
+
+echo
+echo "Wrote log: $OUT_DIR/consumer_tests.log"
+
+
